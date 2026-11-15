@@ -1,0 +1,321 @@
+-- Carregando a biblioteca Rayfield
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- Criando a Janela Principal
+local Window = Rayfield:CreateWindow({
+   Name = "brasil hub arena deagle",
+   Icon = 0,
+   LoadingTitle = "Arena Deagle Hub",
+   LoadingSubtitle = "Carregando com Wall Check...",
+   Theme = "Default",
+   DisableRayfieldPrompts = false,
+   DisableBuildWarnings = false,
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = "ArenaDeagleRayfield",
+      FileName = "Config"
+   },
+   KeySystem = false
+})
+
+-- Criando as Abas
+local CombatTab = Window:CreateTab("Combate", "crosshair")
+local VisualTab = Window:CreateTab("Visuais (ESP)", "eye")
+local PlayerTab = Window:CreateTab("Jogador", "user")
+
+-- Variáveis de Configuração
+local Settings = {
+    AimbotEnabled = false,
+    WallCheck = true, -- Nova opção para ignorar paredes
+    FovSize = 100,
+    FovVisible = true,
+    HitboxEnabled = false,
+    HitboxSize = 4,
+    HitboxTransparency = 0.7,
+    EspEnabled = false,
+    WalkSpeed = 16,
+    JumpPower = 50,
+}
+
+-- Serviços do Roblox
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+-- ==========================================
+-- CÍRCULO DE FOV
+-- ==========================================
+local FOVCircle = nil
+pcall(function()
+    FOVCircle = Drawing.new("Circle")
+    FOVCircle.Visible = false
+    FOVCircle.Transparency = 0.7
+    FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+    FOVCircle.Thickness = 1
+    FOVCircle.Filled = false
+end)
+
+-- ==========================================
+-- ABA DE COMBATE (Aimbot & Wall Check & Hitbox)
+-- ==========================================
+CombatTab:CreateSection("Aimbot & Visão")
+
+CombatTab:CreateToggle({
+   Name = "Ativar Aimbot",
+   CurrentValue = false,
+   Flag = "AimbotToggle",
+   Callback = function(Value)
+      Settings.AimbotEnabled = Value
+   end,
+})
+
+CombatTab:CreateToggle({
+   Name = "Wall Check (Não mira através de paredes)",
+   CurrentValue = true,
+   Flag = "WallCheckToggle",
+   Callback = function(Value)
+      Settings.WallCheck = Value
+   end,
+})
+
+CombatTab:CreateToggle({
+   Name = "Mostrar Círculo de FOV",
+   CurrentValue = true,
+   Flag = "FovToggle",
+   Callback = function(Value)
+      Settings.FovVisible = Value
+      if FOVCircle then
+          FOVCircle.Visible = Value
+      end
+   end,
+})
+
+CombatTab:CreateSlider({
+   Name = "Tamanho do FOV",
+   Range = {30, 300},
+   Increment = 5,
+   Suffix = "px",
+   CurrentValue = 100,
+   Flag = "FovSlider",
+   Callback = function(Value)
+      Settings.FovSize = Value
+      if FOVCircle then
+          FOVCircle.Radius = Value
+      end
+   end,
+})
+
+CombatTab:CreateSection("Expansor de Hitbox (Cabeça)")
+
+CombatTab:CreateToggle({
+   Name = "Ativar Hitbox Expander",
+   CurrentValue = false,
+   Flag = "HitboxToggle",
+   Callback = function(Value)
+      Settings.HitboxEnabled = Value
+      if not Value then
+          for _, player in ipairs(Players:GetPlayers()) do
+              if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+                  player.Character.Head.Size = Vector3.new(1.2, 1, 1)
+                  player.Character.Head.Transparency = 0
+                  player.Character.Head.CanCollide = true
+              end
+          end
+      end
+   end,
+})
+
+CombatTab:CreateSlider({
+   Name = "Tamanho da Hitbox",
+   Range = {1.5, 15},
+   Increment = 0.5,
+   Suffix = " studs",
+   CurrentValue = 4,
+   Flag = "HitboxSizeSlider",
+   Callback = function(Value)
+      Settings.HitboxSize = Value
+   end,
+})
+
+CombatTab:CreateSlider({
+   Name = "Transparência da Hitbox",
+   Range = {0, 1},
+   Increment = 0.1,
+   Suffix = "",
+   CurrentValue = 0.7,
+   Flag = "HitboxTranspSlider",
+   Callback = function(Value)
+      Settings.HitboxTransparency = Value
+   end,
+})
+
+-- ==========================================
+-- ABA DE VISUAIS (ESP Highlight)
+-- ==========================================
+VisualTab:CreateSection("Wallhack / Destaque")
+
+VisualTab:CreateToggle({
+   Name = "Ativar ESP (Highlight)",
+   CurrentValue = false,
+   Flag = "EspToggle",
+   Callback = function(Value)
+      Settings.EspEnabled = Value
+      if not Value then
+          for _, player in ipairs(Players:GetPlayers()) do
+              if player.Character and player.Character:FindFirstChild("DeagleESP") then
+                  player.Character.DeagleESP:Destroy()
+              end
+          end
+      end
+   end,
+})
+
+-- ==========================================
+-- ABA DE JOGADOR (Movimentação)
+-- ==========================================
+PlayerTab:CreateSection("Atributos Físicos")
+
+PlayerTab:CreateSlider({
+   Name = "Velocidade (WalkSpeed)",
+   Range = {16, 100},
+   Increment = 1,
+   Suffix = " WS",
+   CurrentValue = 16,
+   Flag = "WalkSpeedSlider",
+   Callback = function(Value)
+      Settings.WalkSpeed = Value
+   end,
+})
+
+PlayerTab:CreateSlider({
+   Name = "Força do Pulo (JumpPower)",
+   Range = {50, 200},
+   Increment = 5,
+   Suffix = " JP",
+   CurrentValue = 50,
+   Flag = "JumpPowerSlider",
+   Callback = function(Value)
+      Settings.JumpPower = Value
+   end,
+})
+
+-- ==========================================
+-- FUNÇÃO DE RAYCAST (Verificação de Paredes)
+-- ==========================================
+local function IsVisible(targetPart, character)
+    if not Settings.WallCheck then return true end
+    
+    local origin = Camera.CFrame.Position
+    local direction = (targetPart.Position - origin)
+    
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    
+    -- Ignora o próprio personagem e o personagem do alvo para o raio não bater neles mesmos incorretamente
+    local filterList = {LocalPlayer.Character}
+    if character then
+        table.insert(filterList, character)
+    end
+    raycastParams.FilterDescendantsInstances = filterList
+    raycastParams.IgnoreWater = true
+
+    local result = workspace:Raycast(origin, direction, raycastParams)
+    
+    -- Se o raio não bateu em nada no meio do caminho, o alvo está visível (sem paredes na frente)
+    if result == nil then
+        return true
+    end
+    
+    return false
+end
+
+-- ==========================================
+-- FUNÇÃO PARA ENCONTRAR O ALVO VÁLIDO NO FOV
+-- ==========================================
+local function GetClosestPlayerInFOV()
+    local closestPlayer = nil
+    local shortestDistance = Settings.FovSize
+    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local humanoid = player.Character:FindFirstChild("Humanoid")
+            local head = player.Character:FindFirstChild("Head")
+
+            if humanoid and humanoid.Health > 0 and head then
+                local screenPoint, onScreen = Camera:WorldToViewportPoint(head.Position)
+                if onScreen then
+                    local dist = (Vector2.new(screenPoint.X, screenPoint.Y) - screenCenter).Magnitude
+                    if dist < shortestDistance then
+                        -- Verifica se o jogador realmente está visível (sem parede na frente)
+                        if IsVisible(head, player.Character) then
+                            shortestDistance = dist
+                            closestPlayer = head
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return closestPlayer
+end
+
+-- ==========================================
+-- LOOP PRINCIPAL DE EXECUÇÃO
+-- ==========================================
+RunService.RenderStepped:Connect(function()
+    if FOVCircle then
+        FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+        FOVCircle.Visible = Settings.FovVisible and Settings.AimbotEnabled
+    end
+
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.WalkSpeed = Settings.WalkSpeed
+        LocalPlayer.Character.Humanoid.JumpPower = Settings.JumpPower
+    end
+
+    -- Lógica do Aimbot com Wall Check
+    if Settings.AimbotEnabled then
+        local targetHead = GetClosestPlayerInFOV()
+        if targetHead then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetHead.Position)
+        end
+    end
+
+    -- Hitbox e ESP
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local head = player.Character:FindFirstChild("Head")
+            local humanoid = player.Character:FindFirstChild("Humanoid")
+
+            if head and humanoid and humanoid.Health > 0 then
+                if Settings.HitboxEnabled then
+                    head.Size = Vector3.new(Settings.HitboxSize, Settings.HitboxSize, Settings.HitboxSize)
+                    head.Transparency = Settings.HitboxTransparency
+                    head.CanCollide = false
+                end
+
+                if Settings.EspEnabled then
+                    if not player.Character:FindFirstChild("DeagleESP") then
+                        local highlight = Instance.new("Highlight")
+                        highlight.Name = "DeagleESP"
+                        highlight.FillColor = Color3.fromRGB(255, 50, 50)
+                        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                        highlight.FillTransparency = 0.5
+                        highlight.Parent = player.Character
+                    end
+                end
+            end
+        end
+    end
+end)
+
+Rayfield:Notify({
+   Title = "Script Carregado!",
+   Content = "Brasil Hub arena deagle carregado com sucesso",
+   Duration = 4,
+   Image = "check",
+})
