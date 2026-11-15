@@ -14,7 +14,7 @@ local Window = Rayfield:CreateWindow({
 local Tab = Window:CreateTab("Escolher Hub", 4483362458)
 
 Tab:CreateButton({
-   Name = "Executar Hub Principal",
+   Name = "Brasil Hub normal (não recomendo ta bugado por enquanto",
    Callback = function()
        Rayfield:Destroy() -- Fecha o loader antes de abrir o seu hub em Redz
        
@@ -24,10 +24,10 @@ Tab:CreateButton({
 })
 
 Tab:CreateButton({
-   Name = "Executar Hub Universal",
+   Name = "Brasil Hub arena deagle",
    Callback = function()
        Rayfield:Destroy()
        
-       loadstring(game:HttpGet("https://raw.githubusercontent.com/seu-usuario/seu-repo/main/universal.lua"))()
+       loadstring(game:HttpGet("https://raw.githubusercontent.com/dantasdantasdddd-glitch/Brasil-hub/refs/heads/main/Brasil%20hub%20arena%20deagle"))()
    end,
 })
