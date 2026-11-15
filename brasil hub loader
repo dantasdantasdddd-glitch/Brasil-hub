@@ -1,0 +1,33 @@
+-- Carrega a Rayfield oficial pelo GitHub (compatível com Arceus X)
+local Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "BRASIL HUB | Loader",
+   LoadingTitle = "Iniciando Loader...",
+   LoadingSubtitle = "by ian",
+   ConfigurationSaving = {
+      Enabled = false
+   },
+   KeySystem = false
+})
+
+local Tab = Window:CreateTab("Escolher Hub", 4483362458)
+
+Tab:CreateButton({
+   Name = "Executar Hub Principal",
+   Callback = function()
+       Rayfield:Destroy() -- Fecha o loader antes de abrir o seu hub em Redz
+       
+       -- Substitua pelo link Raw do seu Hub pronto:
+       loadstring(game:HttpGet("https://raw.githubusercontent.com/dantasdantasdddd-glitch/Brasil-hub/refs/heads/main/brasil%20hub%20(1).txt"))()
+   end,
+})
+
+Tab:CreateButton({
+   Name = "Executar Hub Universal",
+   Callback = function()
+       Rayfield:Destroy()
+       
+       loadstring(game:HttpGet("https://raw.githubusercontent.com/seu-usuario/seu-repo/main/universal.lua"))()
+   end,
+})
