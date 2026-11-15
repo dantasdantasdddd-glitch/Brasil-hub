@@ -1,18 +1,18 @@
--- Carregando a biblioteca Rayfield
+-- Carregando a biblioteca Rayfield Oficial
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 -- Criando a Janela Principal
 local Window = Rayfield:CreateWindow({
    Name = "brasil hub arena deagle",
    Icon = 0,
-   LoadingTitle = "Arena Deagle Hub",
-   LoadingSubtitle = "Carregando com Wall Check...",
+   LoadingTitle = "brasil hub carregando",
+   LoadingSubtitle = "by ian...",
    Theme = "Default",
    DisableRayfieldPrompts = false,
    DisableBuildWarnings = false,
    ConfigurationSaving = {
       Enabled = true,
-      FolderName = "ArenaDeagleRayfield",
+      FolderName = "brasilhubarenadrgle",
       FileName = "Config"
    },
    KeySystem = false
@@ -26,13 +26,18 @@ local PlayerTab = Window:CreateTab("Jogador", "user")
 -- Variáveis de Configuração
 local Settings = {
     AimbotEnabled = false,
-    WallCheck = true, -- Nova opção para ignorar paredes
-    FovSize = 100,
+    TeamCheck = false, -- Desativado por padrão (ative se o jogo tiver times)
+    WallCheck = true,
+    TargetPart = "Head", -- Pode escolher Cabeça ou Tronco
+    Smoothness = 1, -- 1 = Trava instantâneo, maior = mais suave
+    FovSize = 150,
     FovVisible = true,
     HitboxEnabled = false,
     HitboxSize = 4,
     HitboxTransparency = 0.7,
     EspEnabled = false,
+    AntiAimEnabled = false,
+    DesyncEnabled = false,
     WalkSpeed = 16,
     JumpPower = 50,
 }
@@ -40,27 +45,27 @@ local Settings = {
 -- Serviços do Roblox
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
+local GuiService = game:GetService("GuiService")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
 -- ==========================================
--- CÍRCULO DE FOV
+-- CÍRCULO DE FOV (Alinhado com a mira real)
 -- ==========================================
 local FOVCircle = nil
 pcall(function()
     FOVCircle = Drawing.new("Circle")
     FOVCircle.Visible = false
-    FOVCircle.Transparency = 0.7
-    FOVCircle.Color = Color3.fromRGB(255, 255, 255)
-    FOVCircle.Thickness = 1
+    FOVCircle.Transparency = 0.8
+    FOVCircle.Color = Color3.fromRGB(0, 255, 150)
+    FOVCircle.Thickness = 1.5
     FOVCircle.Filled = false
 end)
 
 -- ==========================================
--- ABA DE COMBATE (Aimbot & Wall Check & Hitbox)
+-- ABA DE COMBATE (Aimbot Corrigido & Hitbox)
 -- ==========================================
-CombatTab:CreateSection("Aimbot & Visão")
+CombatTab:CreateSection("Aimbot Preciso")
 
 CombatTab:CreateToggle({
    Name = "Ativar Aimbot",
@@ -71,12 +76,44 @@ CombatTab:CreateToggle({
    end,
 })
 
+CombatTab:CreateDropdown({
+   Name = "Parte do Corpo (Alvo)",
+   Options = {"Head", "HumanoidRootPart"},
+   CurrentOption = {"Head"},
+   MultipleOptions = false,
+   Flag = "TargetPartDropdown",
+   Callback = function(Option)
+      Settings.TargetPart = Option[1]
+   end,
+})
+
+CombatTab:CreateSlider({
+   Name = "Suavidade (1 = Trava Instantâneo)",
+   Range = {1, 10},
+   Increment = 1,
+   Suffix = "x",
+   CurrentValue = 1,
+   Flag = "SmoothSlider",
+   Callback = function(Value)
+      Settings.Smoothness = Value
+   end,
+})
+
 CombatTab:CreateToggle({
-   Name = "Wall Check (Não mira através de paredes)",
+   Name = "Wall Check (Não mirar atrás de paredes)",
    CurrentValue = true,
    Flag = "WallCheckToggle",
    Callback = function(Value)
       Settings.WallCheck = Value
+   end,
+})
+
+CombatTab:CreateToggle({
+   Name = "Team Check (Ignorar aliados)",
+   CurrentValue = false,
+   Flag = "TeamCheckToggle",
+   Callback = function(Value)
+      Settings.TeamCheck = Value
    end,
 })
 
@@ -94,10 +131,10 @@ CombatTab:CreateToggle({
 
 CombatTab:CreateSlider({
    Name = "Tamanho do FOV",
-   Range = {30, 300},
-   Increment = 5,
+   Range = {50, 400},
+   Increment = 10,
    Suffix = "px",
-   CurrentValue = 100,
+   CurrentValue = 150,
    Flag = "FovSlider",
    Callback = function(Value)
       Settings.FovSize = Value
@@ -173,8 +210,28 @@ VisualTab:CreateToggle({
 })
 
 -- ==========================================
--- ABA DE JOGADOR (Movimentação)
+-- ABA DE JOGADOR (Desync & Movimentação)
 -- ==========================================
+PlayerTab:CreateSection("Sobrevivência Avançada")
+
+PlayerTab:CreateToggle({
+   Name = "Desync / Anti-Hit (nao use)",
+   CurrentValue = false,
+   Flag = "DesyncToggle",
+   Callback = function(Value)
+      Settings.DesyncEnabled = Value
+   end,
+})
+
+PlayerTab:CreateToggle({
+   Name = "Anti-Aim / Spinbot (nao use)",
+   CurrentValue = false,
+   Flag = "AntiAimToggle",
+   Callback = function(Value)
+      Settings.AntiAimEnabled = Value
+   end,
+})
+
 PlayerTab:CreateSection("Atributos Físicos")
 
 PlayerTab:CreateSlider({
@@ -202,7 +259,7 @@ PlayerTab:CreateSlider({
 })
 
 -- ==========================================
--- FUNÇÃO DE RAYCAST (Verificação de Paredes)
+-- FUNÇÃO DE VISIBILIDADE MELHORADA (Ignora paredes invisíveis e acessórios)
 -- ==========================================
 local function IsVisible(targetPart, character)
     if not Settings.WallCheck then return true end
@@ -213,8 +270,7 @@ local function IsVisible(targetPart, character)
     local raycastParams = RaycastParams.new()
     raycastParams.FilterType = Enum.RaycastFilterType.Exclude
     
-    -- Ignora o próprio personagem e o personagem do alvo para o raio não bater neles mesmos incorretamente
-    local filterList = {LocalPlayer.Character}
+    local filterList = {LocalPlayer.Character, Camera}
     if character then
         table.insert(filterList, character)
     end
@@ -223,8 +279,13 @@ local function IsVisible(targetPart, character)
 
     local result = workspace:Raycast(origin, direction, raycastParams)
     
-    -- Se o raio não bateu em nada no meio do caminho, o alvo está visível (sem paredes na frente)
+    -- Se não bateu em nada, está livre
     if result == nil then
+        return true
+    end
+    
+    -- Se bateu em uma barreira invisível (Transparency >= 0.9 ou CanCollide == false), ignora a parede
+    if result.Instance and (result.Instance.Transparency >= 0.8 or not result.Instance.CanCollide) then
         return true
     end
     
@@ -232,27 +293,45 @@ local function IsVisible(targetPart, character)
 end
 
 -- ==========================================
--- FUNÇÃO PARA ENCONTRAR O ALVO VÁLIDO NO FOV
+-- FUNÇÃO DE TEAM CHECK
+-- ==========================================
+local function IsAlly(player)
+    if not Settings.TeamCheck then return false end
+    
+    if LocalPlayer.Team and player.Team and LocalPlayer.Team == player.Team then
+        return true
+    end
+    
+    if LocalPlayer.TeamColor and player.TeamColor and LocalPlayer.TeamColor == player.TeamColor then
+        return true
+    end
+    
+    return false
+end
+
+-- ==========================================
+-- FUNÇÃO PARA ENCONTRAR O ALVO MAIS PRÓXIMO DA MIRA
 -- ==========================================
 local function GetClosestPlayerInFOV()
-    local closestPlayer = nil
+    local closestPart = nil
     local shortestDistance = Settings.FovSize
     local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
-            local humanoid = player.Character:FindFirstChild("Humanoid")
-            local head = player.Character:FindFirstChild("Head")
+            if not IsAlly(player) then
+                local humanoid = player.Character:FindFirstChild("Humanoid")
+                local targetPart = player.Character:FindFirstChild(Settings.TargetPart) or player.Character:FindFirstChild("Head")
 
-            if humanoid and humanoid.Health > 0 and head then
-                local screenPoint, onScreen = Camera:WorldToViewportPoint(head.Position)
-                if onScreen then
-                    local dist = (Vector2.new(screenPoint.X, screenPoint.Y) - screenCenter).Magnitude
-                    if dist < shortestDistance then
-                        -- Verifica se o jogador realmente está visível (sem parede na frente)
-                        if IsVisible(head, player.Character) then
-                            shortestDistance = dist
-                            closestPlayer = head
+                if humanoid and humanoid.Health > 0 and targetPart then
+                    local screenPoint, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+                    if onScreen and screenPoint.Z > 0 then
+                        local dist = (Vector2.new(screenPoint.X, screenPoint.Y) - screenCenter).Magnitude
+                        if dist <= shortestDistance then
+                            if IsVisible(targetPart, player.Character) then
+                                shortestDistance = dist
+                                closestPart = targetPart
+                            end
                         end
                     end
                 end
@@ -260,32 +339,63 @@ local function GetClosestPlayerInFOV()
         end
     end
 
-    return closestPlayer
+    return closestPart
 end
 
 -- ==========================================
--- LOOP PRINCIPAL DE EXECUÇÃO
+-- LOOP DE CÂMERA COM PRIORIDADE MÁXIMA (Impede o jogo de soltar a mira)
 -- ==========================================
-RunService.RenderStepped:Connect(function()
+RunService:BindToRenderStep("ArenaDeagleAimbot", Enum.RenderPriority.Camera.Value + 1, function()
+    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+
     if FOVCircle then
-        FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+        FOVCircle.Position = screenCenter
+        FOVCircle.Radius = Settings.FovSize
         FOVCircle.Visible = Settings.FovVisible and Settings.AimbotEnabled
     end
 
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        LocalPlayer.Character.Humanoid.WalkSpeed = Settings.WalkSpeed
-        LocalPlayer.Character.Humanoid.JumpPower = Settings.JumpPower
-    end
-
-    -- Lógica do Aimbot com Wall Check
     if Settings.AimbotEnabled then
-        local targetHead = GetClosestPlayerInFOV()
-        if targetHead then
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetHead.Position)
+        local targetPart = GetClosestPlayerInFOV()
+        if targetPart then
+            local targetCFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
+            if Settings.Smoothness <= 1 then
+                Camera.CFrame = targetCFrame
+            else
+                Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, 1 / Settings.Smoothness)
+            end
+        end
+    end
+end)
+
+-- ==========================================
+-- LOOP SECUNDÁRIO (Movimentação, Hitbox e ESP)
+-- ==========================================
+local spinAngle = 0
+RunService.Heartbeat:Connect(function()
+    if LocalPlayer.Character then
+        local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+        local rootPart = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+
+        if humanoid then
+            humanoid.WalkSpeed = Settings.WalkSpeed
+            humanoid.JumpPower = Settings.JumpPower
+        end
+
+        if Settings.DesyncEnabled and rootPart then
+            local oldPos = rootPart.CFrame
+            rootPart.CFrame = oldPos + Vector3.new(math.random(-3, 3), 0, math.random(-3, 3))
+            task.wait()
+            if rootPart then
+                rootPart.CFrame = oldPos
+            end
+        end
+
+        if Settings.AntiAimEnabled and rootPart and humanoid and humanoid.Health > 0 then
+            spinAngle = spinAngle + 45
+            rootPart.CFrame = CFrame.new(rootPart.Position) * CFrame.Angles(0, math.rad(spinAngle), 0)
         end
     end
 
-    -- Hitbox e ESP
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local head = player.Character:FindFirstChild("Head")
@@ -302,7 +412,7 @@ RunService.RenderStepped:Connect(function()
                     if not player.Character:FindFirstChild("DeagleESP") then
                         local highlight = Instance.new("Highlight")
                         highlight.Name = "DeagleESP"
-                        highlight.FillColor = Color3.fromRGB(255, 50, 50)
+                        highlight.FillColor = IsAlly(player) and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 50, 50)
                         highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
                         highlight.FillTransparency = 0.5
                         highlight.Parent = player.Character
@@ -314,8 +424,8 @@ RunService.RenderStepped:Connect(function()
 end)
 
 Rayfield:Notify({
-   Title = "Script Carregado!",
-   Content = "Brasil Hub arena deagle carregado com sucesso",
+   Title = "brasil hub carregando",
+   Content = "carregado com sucesso",
    Duration = 4,
    Image = "check",
 })
